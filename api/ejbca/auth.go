@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -62,6 +63,10 @@ type OAuthAuthenticatorBuilder struct {
 	scopes            []string
 	caCertificatePath string
 	caCertificates    []*x509.Certificate
+
+	// unexported: lazily initialized token source and mutex to protect it
+	tokenSource oauth2.TokenSource
+	tsMu sync.Mutex
 }
 
 func NewOAuthAuthenticatorBuilder() *OAuthAuthenticatorBuilder {
@@ -119,10 +124,10 @@ func (b *OAuthAuthenticatorBuilder) Build() (Authenticator, error) {
 		}
 	}
 
-	tokenSource := config.TokenSource(context.Background())
+	ctx := context.Background()
+
 	oauthTransport := &oauth2.Transport{
 		Base:   http.DefaultTransport,
-		Source: tokenSource,
 	}
 
 	if b.caCertificates == nil {
@@ -149,7 +154,16 @@ func (b *OAuthAuthenticatorBuilder) Build() (Authenticator, error) {
 
 		// Wrap the custom transport with the oauth2.Transport
 		oauthTransport.Base = customTransport
+		ctx = context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: customTransport})
 	}
+
+	// Lazily initialize the token source and cache it
+	b.tsMu.Lock()
+	if b.tokenSource == nil {
+		b.tokenSource = config.TokenSource(ctx)
+	}
+	oauthTransport.Source = b.tokenSource
+	b.tsMu.Unlock()
 
 	client := &http.Client{
 		Transport: oauthTransport,
