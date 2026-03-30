@@ -63,10 +63,6 @@ type OAuthAuthenticatorBuilder struct {
 	scopes            []string
 	caCertificatePath string
 	caCertificates    []*x509.Certificate
-
-	// unexported: lazily initialized token source and mutex to protect it
-	tokenSource oauth2.TokenSource
-	tsMu sync.Mutex
 }
 
 func NewOAuthAuthenticatorBuilder() *OAuthAuthenticatorBuilder {
@@ -157,13 +153,7 @@ func (b *OAuthAuthenticatorBuilder) Build() (Authenticator, error) {
 		ctx = context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: customTransport})
 	}
 
-	// Lazily initialize the token source and cache it
-	b.tsMu.Lock()
-	if b.tokenSource == nil {
-		b.tokenSource = config.TokenSource(ctx)
-	}
-	oauthTransport.Source = b.tokenSource
-	b.tsMu.Unlock()
+	oauthTransport.Source = config.TokenSource(ctx)
 
 	client := &http.Client{
 		Transport: oauthTransport,
