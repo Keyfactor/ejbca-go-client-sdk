@@ -1,5 +1,11 @@
 name: test
-on: [workflow_dispatch, push, pull_request]
+on:
+    pull_request:
+        types: [opened, synchronize, reopened]
+    push:
+        branches:
+            - main
+            - release-*
 jobs:
   build:
     name: Build and Lint
