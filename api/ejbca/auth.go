@@ -33,7 +33,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
