@@ -1,5 +1,5 @@
 /*
-Copyright 2024 Keyfactor
+Copyright 2026 Keyfactor
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -134,22 +134,37 @@ func (b *OAuthAuthenticatorBuilder) Build() (Authenticator, error) {
 	}
 
 	if len(b.caCertificates) > 0 {
-		tlsConfig := &tls.Config{
+		// Strict TLS for EJBCA: only the supplied CA bundle.
+		ejbcaTLSConfig := &tls.Config{
 			Renegotiation: tls.RenegotiateOnceAsClient,
+			RootCAs:       x509.NewCertPool(),
 		}
-
-		tlsConfig.RootCAs = x509.NewCertPool()
 		for _, caCert := range b.caCertificates {
-			tlsConfig.RootCAs.AddCert(caCert)
+			ejbcaTLSConfig.RootCAs.AddCert(caCert)
 		}
+		ejbcaTransport := http.DefaultTransport.(*http.Transport).Clone()
+		ejbcaTransport.TLSClientConfig = ejbcaTLSConfig
+		ejbcaTransport.TLSHandshakeTimeout = 10 * time.Second
 
-		customTransport := http.DefaultTransport.(*http.Transport).Clone()
-		customTransport.TLSClientConfig = tlsConfig
-		customTransport.TLSHandshakeTimeout = 10 * time.Second
+		// Permissive TLS for the OAuth provider: system trust bundle + supplied CA bundle.
+		// This allows publicly-trusted OAuth providers (Okta, Entra, etc.) to work without
+		// extra configuration, while still supporting private OAuth providers via the CA bundle.
+		oauthRootCAs, err := x509.SystemCertPool()
+		if err != nil {
+			oauthRootCAs = x509.NewCertPool()
+		}
+		for _, caCert := range b.caCertificates {
+			oauthRootCAs.AddCert(caCert)
+		}
+		oauthProviderTransport := http.DefaultTransport.(*http.Transport).Clone()
+		oauthProviderTransport.TLSClientConfig = &tls.Config{
+			Renegotiation: tls.RenegotiateOnceAsClient,
+			RootCAs:       oauthRootCAs,
+		}
+		oauthProviderTransport.TLSHandshakeTimeout = 10 * time.Second
 
-		// Wrap the custom transport with the oauth2.Transport
-		oauthTransport.Base = customTransport
-		ctx = context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: customTransport})
+		oauthTransport.Base = ejbcaTransport
+		ctx = context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: oauthProviderTransport})
 	}
 
 	oauthTransport.Source = config.TokenSource(ctx)
