@@ -1,0 +1,41 @@
+name: test
+on:
+    pull_request:
+        types: [opened, synchronize, reopened]
+    push:
+        branches:
+            - main
+            - release-*
+jobs:
+  build:
+    name: Build and Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Checkout code
+      # https://github.com/actions/checkout
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # Setup GoLang build environment
+      # https://github.com/actions/setup-go
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      # Download dependencies
+      - run: go mod download
+
+      # Build Go binary
+      - run: go build ./...
+
+      - run: go vet ./...
+
+      # Run Go linters
+      # https://github.com/golangci/golangci-lint-action
+      - name: Run linters
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.4.0
