@@ -513,6 +513,7 @@ func (a *V1CaApiService) ListCasExecute(r ApiListCasRequest) (*CaInfosRestRespon
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
+	localVarQueryParams.Add("includeExternal", "true")
 	localVarFormParams := url.Values{}
 
 	// to determine the Content-Type header
